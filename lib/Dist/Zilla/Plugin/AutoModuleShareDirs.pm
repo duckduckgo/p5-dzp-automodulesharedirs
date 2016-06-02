@@ -6,7 +6,7 @@ use Moose;
 extends 'Dist::Zilla::Plugin::ModuleShareDirs';
 
 use Module::Metadata;
-use Class::Load ':all';
+use Class::Load 'load_class';
 use Carp qw( croak );
 
 around BUILDARGS => sub {
@@ -20,9 +20,8 @@ around BUILDARGS => sub {
 
 	my $root = $copy{zilla}->root;
 
-	my $lib = $root->child('lib');
-	push @INC, $lib;
-	warn "INC: @INC";
+	my $lib = $root->child('lib')->stringify;
+	unshift @INC, $lib;
 
 	my $modules = Module::Metadata->provides(
 		dir => $lib,
@@ -34,14 +33,9 @@ around BUILDARGS => sub {
 			next unless grep { $mod =~ /^${_}::.*/ } split(/,/,$scan_namespaces);
 		}
 		if ($sharedir_method) {
-			warn "loading $mod";
-			my @out = try_load_class($mod);
-			warn "load error: $out[1]" unless $out[0];
-			use Data::Printer;
-			p $mod;
+			load_class($mod);
 			next unless $mod->can($sharedir_method);
 			my $sd = $mod->$sharedir_method;
-			warn "sd: $sd";
 			$copy{$mod} = $sd if -d $root->child($sd);
 		}
 		else {
