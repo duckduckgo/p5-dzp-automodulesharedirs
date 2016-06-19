@@ -8,6 +8,7 @@ extends 'Dist::Zilla::Plugin::ModuleShareDirs';
 use Module::Metadata;
 use Class::Load 'load_class';
 use Carp qw( croak );
+use List::Util 'first';
 
 around BUILDARGS => sub {
 	my $orig = shift;
@@ -15,7 +16,7 @@ around BUILDARGS => sub {
 
 	my %copy = ref $arg[0] ? %{$arg[0]} : @arg;
 
-	my $scan_namespaces = delete $copy{scan_namespaces};
+	my @scan_namespaces = split ',', delete $copy{scan_namespaces};
 	my $sharedir_method = delete $copy{sharedir_method};
 
 	my $root = $copy{zilla}->root;
@@ -29,8 +30,8 @@ around BUILDARGS => sub {
 	);
 
 	for my $mod (keys %{$modules}) {
-		if ($scan_namespaces) {
-			next unless grep { $mod =~ /^${_}::.*/ } split(/,/,$scan_namespaces);
+		if (@scan_namespaces) {
+			next unless first { $mod =~ /^${_}::.*/ } @scan_namespaces;
 		}
 		if ($sharedir_method) {
 			load_class($mod);
@@ -40,7 +41,7 @@ around BUILDARGS => sub {
 		}
 		else {
 			# TODO set a default handling
-			croak __PACKAGE__." has no default behaviour defined so far, please use sharedir_method";
+			croak __PACKAGE__ . ' has no default behaviour defined so far, please use sharedir_method';
 		}
 	}
 
