@@ -1,10 +1,4 @@
 package Dist::Zilla::Plugin::AutoModuleShareDirs;
-BEGIN {
-  $Dist::Zilla::Plugin::AutoModuleShareDirs::AUTHORITY = 'cpan:GETTY';
-}
-{
-  $Dist::Zilla::Plugin::AutoModuleShareDirs::VERSION = '0.001';
-}
 # ABSTRACT: Automatically install sharedirs for modules by scheme
 
 use Moose;
@@ -12,16 +6,9 @@ use Moose;
 extends 'Dist::Zilla::Plugin::ModuleShareDirs';
 
 use Module::Metadata;
-use Class::Load ':all';
-
-### SHOULD BE ONLY LOADED ON SHAERDIR_MEHOD USAGE ACTUALLY....
-use File::Spec;
-my $lib;
-BEGIN { $lib = File::Spec->catdir( File::Spec->curdir(), 'lib' ); }
+use Class::Load 'load_class';
 use Carp qw( croak );
-use lib "$lib";
-#Carp::carp("[Bootstrap::lib] $lib added to \@INC");
-##################################################################
+use List::Util 'first';
 
 around BUILDARGS => sub {
 	my $orig = shift;
@@ -29,32 +16,33 @@ around BUILDARGS => sub {
 
 	my %copy = ref $arg[0] ? %{$arg[0]} : @arg;
 
-	my $scan_namespaces = delete $copy{scan_namespaces};
+	my @scan_namespaces = split ',', delete $copy{scan_namespaces};
 	my $sharedir_method = delete $copy{sharedir_method};
 
+	my $root = $copy{zilla}->root;
+
+	my $lib = $root->child('lib')->stringify;
+	unshift @INC, $lib;
+
 	my $modules = Module::Metadata->provides(
-		dir => $copy{zilla}->root->subdir('lib'),
+		dir => $lib,
 		version => '1.4',
 	);
 
-	my %sharedirs;
-
 	for my $mod (keys %{$modules}) {
-		if ($scan_namespaces) {
-			next unless grep { $mod =~ /^${_}::.*/ } split(/,/,$scan_namespaces);
+		if (@scan_namespaces) {
+			next unless first { $mod =~ /^${_}::.*/ } @scan_namespaces;
 		}
 		if ($sharedir_method) {
-			try_load_class($mod);
+			load_class($mod);
 			next unless $mod->can($sharedir_method);
-			$sharedirs{$mod} = $mod->$sharedir_method;
-		} else {
-			# TODO set a default handling
-			croak __PACKAGE__." has no default behaviour defined so far, please use sharedir_method";
+			my $sd = $mod->$sharedir_method;
+			$copy{$mod} = $sd if -d $root->child($sd);
 		}
-	}
-
-	for (keys %sharedirs) {
-		$copy{$_} = $sharedirs{$_} if -d $copy{zilla}->root->subdir($sharedirs{$_});
+		else {
+			# TODO set a default handling
+			croak __PACKAGE__ . ' has no default behaviour defined so far, please use sharedir_method';
+		}
 	}
 
 	return $class->$orig(%copy);
@@ -69,10 +57,6 @@ __END__
 =head1 NAME
 
 Dist::Zilla::Plugin::AutoModuleShareDirs - Automatically install sharedirs for modules by scheme
-
-=head1 VERSION
-
-version 0.001
 
 =head1 SYNOPSIS
 
@@ -99,35 +83,21 @@ It only includes modules that have a sharedir after the specification given.
 
 L<Dist::Zilla::Plugin::ModuleShareDirs>
 
-=head1 SPONSOR
+=head1 CONTRIBUTING
 
-This module is sponsored by L<DuckDuckGo Inc.|http://duckduckgo.com/>.
+To browse the repository, submit issues, or bug fixes, please visit
+the github repository:
 
-=head1 SUPPORT
+=over 4
 
-IRC
+L<https://github.com/duckduckgo/p5-dzp-automodulesharedirs>
 
-  Join #distzilla on irc.perl.org. Highlight Getty for fast reaction :).
-
-Repository
-
-  http://github.com/Getty/p5-dist-zilla-plugin-automodulesharedirs
-  Pull request and additional contributors are welcome
-
-Issue Tracker
-
-  http://github.com/Getty/p5-dist-zilla-plugin-automodulesharedirs/issues
+=back
 
 =head1 AUTHOR
 
+Zach Thompson <zach@duckduckgo.com>
 Torsten Raudssus <torsten@raudss.us>
-
-=head1 COPYRIGHT AND LICENSE
-
-This software is copyright (c) 2012 by Torsten Raudssus L<http://raudss.us/>.
-
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
 
 =cut
 
