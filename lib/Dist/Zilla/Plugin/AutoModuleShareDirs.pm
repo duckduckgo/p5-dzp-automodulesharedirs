@@ -6,46 +6,41 @@ use Moose;
 extends 'Dist::Zilla::Plugin::ModuleShareDirs';
 
 use Module::Metadata;
-use Class::Load 'load_class';
 use Carp qw( croak );
 use List::Util 'first';
 
 around BUILDARGS => sub {
-	my $orig = shift;
-	my ( $class, @arg ) = @_;
+    my $orig = shift;
+    my ( $class, @arg ) = @_;
 
-	my %copy = ref $arg[0] ? %{$arg[0]} : @arg;
+    my %copy = ref $arg[0] ? %{$arg[0]} : @arg;
 
-	my @scan_namespaces = split ',', delete $copy{scan_namespaces};
-	my $sharedir_method = delete $copy{sharedir_method};
+    my @scan_namespaces = split ',', delete $copy{scan_namespaces};
 
-	my $root = $copy{zilla}->root;
+    my $root = $copy{zilla}->root;
 
-	my $lib = $root->child('lib')->stringify;
-	unshift @INC, $lib;
+    my $lib = $root->child('lib')->stringify;
+    unshift @INC, $lib;
 
-	my $modules = Module::Metadata->provides(
-		dir => $lib,
-		version => '1.4',
-	);
+    my $modules = Module::Metadata->provides(
+        dir => $lib,
+        version => '1.4',
+    );
 
-	for my $mod (keys %{$modules}) {
-		if (@scan_namespaces) {
-			next unless first { $mod =~ /^${_}::.*/ } @scan_namespaces;
-		}
-		if ($sharedir_method) {
-			load_class($mod);
-			next unless $mod->can($sharedir_method);
-			my $sd = $mod->$sharedir_method;
-			$copy{$mod} = $sd if -d $root->child($sd);
-		}
-		else {
-			# TODO set a default handling
-			croak __PACKAGE__ . ' has no default behaviour defined so far, please use sharedir_method';
-		}
-	}
+    for my $mod (keys %{$modules}) {
+        if (@scan_namespaces) {
+            next unless first { $mod =~ /^${_}::.*/ } @scan_namespaces;
+        }
+        # These lines mirror what is in DDG::Meta::ShareDir. The module
+        # part should be refactored at some point
+        my @parts = split '::', $mod;
+        shift @parts;
+        unshift @parts, 'share';
+        my $sd = join('/',map { s/([a-z])([A-Z])/$1_$2/g; lc; } @parts);
+        $copy{$mod} = $sd if -d $root->child($sd);
+    }
 
-	return $class->$orig(%copy);
+    return $class->$orig(%copy);
 };
 
 1;
@@ -63,8 +58,7 @@ Dist::Zilla::Plugin::AutoModuleShareDirs - Automatically install sharedirs for m
 In dist.ini:
 
   [AutoModuleShareDirs]
-  scan_namespaces = MyApp::Plugin
-  sharedir_method = function_on_the_package
+  scan_namespaces = DDG::Goodie
 
 =head1 DESCRIPTION
 
